@@ -1,0 +1,215 @@
+---
+title: "Analysis of data from NOAA storm database"
+author: "David Chabra"
+date: "7/17/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+
+In this document we examined the data from NOAA storm database. To do this we first read in the data and edited some variables to standardize the data and prepare the data for analysis. We also added in a new variable to assist in our economic analysis of different storm types. We then Looked at our data closely which culminated in the production of Figures one and two which allow us to quickly compare the damaging storms to human health by different metrics and damage the economy respectively.
+
+## Data Processing
+
+First we must download the data which can be found here 
+[assignment instuctions](https://www.coursera.org/learn/reproducible-research/peer/OMZ37/course-project-2).  
+I downloaded this data from the first download link on this instruction page on July 14th 2021 at 9:30 AM PST.
+I also unzipped the file and placed it in My project folder for this Assignment, which is my working directly for the duration of this document.  
+
+Now that we have the data in our working directory, we can read it into R.
+
+```{r, cache=TRUE}
+
+library(dplyr)
+library(ggplot2)
+
+data <- read.csv("./repdata_data_StormData.csv")
+
+```
+
+Since several of our questions revolve around the event type variable we will turn the event type variable into a factor
+
+```{r, cache=TRUE}
+
+data$EVTYPE <- as.factor(data$EVTYPE)
+
+```
+
+Since we will be examining economic consequences for one of our questions we should standardize the measurements for property damage as well as crop damage to be in thousands of dollars instead of different units.
+
+```{r, cache=TRUE}
+
+mult_by_type <- function(x) {
+    out <- 0
+    if (x == "K") {
+        out <- 1
+    }
+    if (x == "M") {
+        out <- 1000
+    }
+    if (x == "B") {
+        out <- 1000000
+    }
+    out
+}
+
+data$PROPDMG <- data$PROPDMG * sapply(data$PROPDMGEXP, mult_by_type)
+
+data$CROPDMG <- data$CROPDMG * sapply(data$CROPDMGEXP, mult_by_type)
+
+```
+
+Finally since we will be examining economic impact will create a New variable which will let us more easily examine this. This new variable will be the sum of property damage and crop damage and will represent the total economic impact that is presented in this data set.
+
+```{r, cache=TRUE}
+
+data <- mutate(data, econ_imp = CROPDMG + PROPDMG)
+
+```
+
+Now that we have prepared the data we can move onto our results.
+
+## Results
+
+### Question 1
+
+In this section we investigated what are the most harmful events with respect to health.  
+
+First we will look at which types of events have most impact on health metrics focusing on total deaths and injuries and mean deaths and injuries for each type of event.
+
+```{r, cache=TRUE}
+
+data <- group_by(data, EVTYPE)
+health_metrics <- summarise(data, 
+          total_deaths = sum(FATALITIES), 
+          mean_deaths = mean(FATALITIES), 
+          total_injuries = sum(INJURIES), 
+          mean_injuries = mean(INJURIES)
+          )
+
+print(health_metrics$EVTYPE[max(health_metrics$total_deaths) == health_metrics$total_deaths], max.levels = 0)
+
+print(health_metrics$EVTYPE[max(health_metrics$mean_deaths) == health_metrics$mean_deaths], max.levels = 0)
+
+print(health_metrics$EVTYPE[max(health_metrics$total_injuries) == health_metrics$total_injuries], max.levels = 0)
+
+print(health_metrics$EVTYPE[max(health_metrics$mean_injuries) == health_metrics$mean_injuries], max.levels = 0)
+
+```
+
+We can see that tornadoes have both the highest total injuries and deaths, but heat waves are in the top for mean injuries.  
+
+If we plot each type of measurement we can get a clear comparison of the 10 most impactful event types for each measurement.
+
+```{r}
+
+library(dplyr)
+library(ggplot2)
+
+ordered_tot_de <- health_metrics[order(health_metrics$total_deaths, decreasing = TRUE), ]
+
+ordered_tot_in <- health_metrics[order(health_metrics$total_injuries, decreasing = TRUE), ]
+
+ordered_me_de <- health_metrics[order(health_metrics$mean_deaths, decreasing = TRUE), ]
+
+ordered_me_in <- health_metrics[order(health_metrics$mean_injuries, decreasing = TRUE), ]
+
+par(mfrow = c(2, 2), mar = c(9,3,3,2))
+barplot(ordered_tot_de$total_deaths[1:10], 
+        names.arg = ordered_tot_de$EVTYPE[1:10], 
+        cex.names = .7, 
+        las = 3, 
+        main = "total deaths")
+
+barplot(ordered_tot_in$total_injuries[1:10], 
+        names.arg = ordered_tot_in$EVTYPE[1:10], 
+        cex.names = .7, 
+        las = 3, 
+        main = "total injuries")
+
+barplot(ordered_me_de$mean_deaths[1:10], 
+        names.arg = ordered_me_de$EVTYPE[1:10], 
+        cex.names = .7, 
+        las = 3, 
+        main = "mean deaths")
+
+barplot(ordered_me_in$mean_injuries[1:10], 
+        names.arg = ordered_me_in$EVTYPE[1:10], 
+        cex.names = .7, 
+        las = 3, 
+        main = "mean injuries")
+
+```
+
+Here we can see that tornadoes are by far the most impactful in terms of total deaths and injuries. However when it comes to mean deaths and mean injuries many other events come above it. This difference in results from looking at totals versus means is interesting, this might indicate that there is a large variance in terms of impact on population health for certain types of events.
+
+### Question 2
+
+In the section we will investigate which events have the greatest economic consequences.  
+
+Similarly to the previous question we will organize event type by total economic impact and mean economic impact. However, since in this section property damage and crop damage are effectively both economic impact and they are in the same units we will use their sum instead of examining them separately.  
+
+After this we will find the maximum value for total and mean impact.
+
+```{r}
+
+data <- ungroup(data)
+data <- group_by(data, EVTYPE)
+econ_metrics <- summarise(data, 
+                          tot_imp = sum(econ_imp), 
+                          mean_imp = mean(econ_imp)
+                          )
+
+print(econ_metrics$EVTYPE[max(econ_metrics$tot_imp) == econ_metrics$tot_imp], 
+      max.levels = 0)
+
+print(econ_metrics$EVTYPE[max(econ_metrics$mean_imp) == econ_metrics$mean_imp], 
+      max.levels = 0)
+
+```
+
+This is interesting as we see some of the same events that appeared in the most greatest on population health question.  
+
+To understand the data better let's look at it in the context of the top 10 most economically impactful in terms of total impact and mean impact.
+
+```{r}
+
+ordered_ec_to <- econ_metrics[order(econ_metrics$tot_imp, 
+                                    decreasing = TRUE), ]
+
+ordered_ec_me <- econ_metrics[order(econ_metrics$mean_imp, 
+                                    decreasing = TRUE), ]
+
+par(mfrow = c(1, 2), mar = c(8, 4, 4, 2))
+barplot(ordered_ec_to$tot_imp[1:10], 
+        names.arg = ordered_ec_to$EVTYPE[1:10], 
+        cex.names = .6, 
+        las = 3, 
+        main = "Total Economic Impact")
+
+barplot(ordered_ec_me$mean_imp[1:10], 
+        names.arg = ordered_ec_me$EVTYPE[1:10], 
+        cex.names = .6, 
+        las = 3, 
+        main = "Mean Economic Impact")
+
+```
+
+From these bar plots we can clearly see that the first few event types have by far the largest impact. It may be beneficial to focus on these. Particularly if we are interested in total impact because floods appear to substantially outweigh the competition for totals in thousands.
+
+
+
+
+
+
+
+
+
+
+
